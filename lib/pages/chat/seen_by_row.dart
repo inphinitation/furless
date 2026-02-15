@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 
+import 'package:matrix/matrix.dart';
+
 import 'package:fluffychat/config/themes.dart';
-import 'package:fluffychat/pages/chat/chat.dart';
-import 'package:fluffychat/utils/room_status_extension.dart';
 import 'package:fluffychat/widgets/avatar.dart';
 import 'package:fluffychat/widgets/matrix.dart';
 
 class SeenByRow extends StatelessWidget {
-  final ChatController controller;
-  const SeenByRow(this.controller, {super.key});
+  final Event event;
+  const SeenByRow({super.key, required this.event});
 
   @override
   Widget build(BuildContext context) {
@@ -16,17 +16,18 @@ class SeenByRow extends StatelessWidget {
 
     const maxAvatars = 7;
     return StreamBuilder(
-      stream: controller.room.client.onSync.stream.where(
+      stream: event.room.client.onSync.stream.where(
         (syncUpdate) =>
-            syncUpdate.rooms?.join?[controller.room.id]?.ephemeral?.any(
+            syncUpdate.rooms?.join?[event.room.id]?.ephemeral?.any(
               (ephemeral) => ephemeral.type == 'm.receipt',
             ) ??
             false,
       ),
       builder: (context, asyncSnapshot) {
-        final seenByUsers = controller.room.getSeenByUsers(
-          controller.timeline!,
-        );
+        final seenByUsers = event.receipts
+            .map((r) => r.user)
+            .where((user) => user.id != event.room.client.userID)
+            .toList();
         return Container(
           width: double.infinity,
           alignment: Alignment.center,
@@ -39,13 +40,15 @@ class SeenByRow extends StatelessWidget {
                 ? Duration.zero
                 : FluffyThemes.animationDuration,
             curve: FluffyThemes.animationCurve,
-            alignment:
-                controller.timeline!.events.isNotEmpty &&
-                    controller.timeline!.events.first.senderId ==
-                        Matrix.of(context).client.userID
+            alignment: event.senderId == Matrix.of(context).client.userID
                 ? Alignment.topRight
                 : Alignment.topLeft,
-            padding: const EdgeInsets.only(left: 8, right: 8, bottom: 4),
+            padding: const EdgeInsets.only(
+              bottom: 4,
+              top: 1,
+              left: 8,
+              right: 8,
+            ),
             child: Wrap(
               spacing: 4,
               children: [
