@@ -28,53 +28,55 @@ class VoipPlugin with WidgetsBindingObserver implements WebRTCDelegate {
   bool background = false;
   bool speakerOn = false;
   late VoIP voip;
-  OverlayEntry? overlayEntry;
+  bool _callRoutePushed = false;
+
   BuildContext get context => matrix.context;
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState? state) {
-    background =
-        (state == AppLifecycleState.detached ||
+    background = (state == AppLifecycleState.detached ||
         state == AppLifecycleState.paused);
   }
 
   void addCallingOverlay(String callId, CallSession call) {
-    final context = kIsWeb
-        ? ChatList.contextForVoip!
-        : this.context; // web is weird
+    final ctx = Nav.ctx ?? (kIsWeb ? ChatList.contextForVoip! : context);
 
-    if (overlayEntry != null) {
-      Logs().e('[VOIP] addCallingOverlay: The call session already exists?');
-      overlayEntry!.remove();
+    if (Nav.ctx == null) {
+      debugPrint('[VOIP] addCallingOverlay: Nav.ctx is null; retry next frame');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (voip.currentCID == call.callId) addCallingOverlay(callId, call);
+      });
+      return;
     }
-    // Overlay.of(context) is broken on web
-    // falling back on a dialog
-    if (kIsWeb) {
-      showDialog(
-        context: context,
-        builder: (context) => Calling(
-          context: context,
-          client: client,
-          callId: callId,
-          call: call,
-          onClear: () => Navigator.of(context).pop(),
-        ),
-      );
-    } else {
-      overlayEntry = OverlayEntry(
-        builder: (_) => Calling(
-          context: context,
-          client: client,
-          callId: callId,
-          call: call,
-          onClear: () {
-            overlayEntry?.remove();
-            overlayEntry = null;
-          },
-        ),
-      );
-      Overlay.of(context).insert(overlayEntry!);
+
+    if (_callRoutePushed) {
+      debugPrint('[VOIP] addCallingOverlay: route already pushed, ignoring');
+      return;
     }
+    _callRoutePushed = true;
+
+    showGeneralDialog(
+      context: ctx,
+      barrierDismissible: false,
+      barrierColor: Colors.black54,
+      barrierLabel: 'Call',
+      transitionDuration: const Duration(milliseconds: 150),
+      pageBuilder: (_, __, ___) => Calling(
+        context: ctx,
+        client: client,
+        callId: callId,
+        call: call,
+        onClear: () {
+          final nav = Nav.navigatorKey.currentState;
+          if (nav?.canPop() ?? false) {
+            nav!.pop();
+          }
+          _callRoutePushed = false;
+        },
+      ),
+    ).then((_) {
+      _callRoutePushed = false;
+    });
   }
 
   @override
@@ -85,9 +87,10 @@ class VoipPlugin with WidgetsBindingObserver implements WebRTCDelegate {
 
   @override
   Future<RTCPeerConnection> createPeerConnection(
-    Map<String, dynamic> configuration, [
-    Map<String, dynamic> constraints = const {},
-  ]) => webrtc_impl.createPeerConnection(configuration, constraints);
+      Map<String, dynamic> configuration, [
+        Map<String, dynamic> constraints = const {},
+      ]) =>
+      webrtc_impl.createPeerConnection(configuration, constraints);
 
   Future<bool> get hasCallingAccount async => false;
 
@@ -114,65 +117,68 @@ class VoipPlugin with WidgetsBindingObserver implements WebRTCDelegate {
     if (PlatformInfos.isAndroid) {
       try {
         final wasForeground = await FlutterForegroundTask.isAppOnForeground;
-
         await matrix.store.setString(
           'wasForeground',
           wasForeground == true ? 'true' : 'false',
         );
         FlutterForegroundTask.setOnLockScreenVisibility(true);
         FlutterForegroundTask.wakeUpScreen();
-        FlutterForegroundTask.launchApp();
+        if (wasForeground != true) {
+          FlutterForegroundTask.launchApp();
+        }
       } catch (e) {
         Logs().e('VOIP foreground failed $e');
       }
-      // use fallback flutter call pages for outgoing and video calls.
-      addCallingOverlay(call.callId, call);
-    } else {
-      addCallingOverlay(call.callId, call);
     }
+    addCallingOverlay(call.callId, call);
   }
 
   @override
   Future<void> handleCallEnded(CallSession session) async {
-    if (overlayEntry != null) {
-      overlayEntry!.remove();
-      overlayEntry = null;
-      if (PlatformInfos.isAndroid) {
-        FlutterForegroundTask.setOnLockScreenVisibility(false);
-        FlutterForegroundTask.stopService();
-        final wasForeground = matrix.store.getString('wasForeground');
-        wasForeground == 'false' ? FlutterForegroundTask.minimizeApp() : null;
+    final nav = Nav.navigatorKey.currentState;
+    if (_callRoutePushed && (nav?.canPop() ?? false)) {
+      nav!.pop();
+    }
+    _callRoutePushed = false;
+
+    if (PlatformInfos.isAndroid) {
+      FlutterForegroundTask.setOnLockScreenVisibility(false);
+      FlutterForegroundTask.stopService();
+      final wasForeground = matrix.store.getString('wasForeground');
+      if (wasForeground == 'false') {
+        FlutterForegroundTask.minimizeApp();
       }
     }
   }
 
   @override
   Future<void> handleGroupCallEnded(GroupCallSession groupCall) async {
-    // TODO: implement handleGroupCallEnded
+    // No-op: Element Calls
   }
 
   @override
   Future<void> handleNewGroupCall(GroupCallSession groupCall) async {
-    // TODO: implement handleNewGroupCall
+    // No-op: Element Calls
   }
 
   @override
-  // TODO: implement canHandleNewCall
   bool get canHandleNewCall =>
       voip.currentCID == null && voip.currentGroupCID == null;
 
   @override
   Future<void> handleMissedCall(CallSession session) async {
-    // TODO: implement handleMissedCall
+    // No-op
   }
 
   @override
-  // TODO: implement keyProvider
-  EncryptionKeyProvider? get keyProvider => throw UnimplementedError();
+  EncryptionKeyProvider? get keyProvider => null;
 
   @override
   Future<void> registerListeners(CallSession session) {
-    // TODO: implement registerListeners
-    throw UnimplementedError();
+    return SynchronousFuture(null);
   }
+}
+class Nav {
+  static final navigatorKey = GlobalKey<NavigatorState>();
+  static BuildContext? get ctx => navigatorKey.currentContext;
 }
