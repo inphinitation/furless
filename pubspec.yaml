@@ -39,22 +39,22 @@ dependencies:
   flutter_web_auth_2: ^5.0.2
   flutter_webrtc: ^1.4.1
   geolocator: ^14.0.2
-  go_router: ^17.2.2
+  go_router: ^17.2.3
   handy_window: ^0.4.2
   highlight: ^0.7.0
   html: ^0.15.4
   http: ^1.6.0
   image: ^4.7.2
-  image_picker: ^1.2.1
+  image_picker: ^1.2.2
   intl: any
   just_audio: ^0.10.5
   latlong2: ^0.9.1
-  matrix: ^7.0.0
+  matrix: ^7.1.0
   mime: ^2.0.0
   native_imaging: ^0.4.0
   opus_caf_converter_dart: ^1.0.1
   package_info_plus: ^9.0.1
-  particles_network: ^1.9.3
+  particles_network: ^1.9.4
   path: ^1.9.0
   path_provider: ^2.1.2
   pretty_qr_code: ^3.6.0
@@ -81,7 +81,7 @@ dependencies:
   webrtc_interface: ^1.5.1
 
 dev_dependencies:
-  dart_code_linter: ^4.0.2
+  dart_code_linter: ^4.0.3
   flutter_lints: ^6.0.0
   flutter_native_splash: ^2.4.7
   flutter_test:
